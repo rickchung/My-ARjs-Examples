@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+        <title>Example 3: Geographical Locations</title>
+
+        <script
+            src="https://code.jquery.com/jquery-3.5.1.slim.min.js"
+            integrity="sha256-4+XzXVhsDmqanXGHaHvgh1gMQKX40OUvDEBTu8JcmNs="
+            crossorigin="anonymous"
+        ></script>
+        <script src="https://aframe.io/releases/1.0.4/aframe.min.js"></script>
+        <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
+        <script src="https://unpkg.com/aframe-look-at-component@0.8.0/dist/aframe-look-at-component.min.js"></script>
+
+        <script>
+            // A list of predefined locations
+            var locationData = [
+                {
+                    name: "Grocery Store",
+                    latitude: 33.408897,
+                    longtitude: -111.925186,
+                },
+                {
+                    name: "Gas Station",
+                    latitude: 33.407894,
+                    longtitude: -111.922084,
+                },
+                {
+                    name: "Corner Store",
+                    latitude: 33.407844,
+                    longtitude: -111.917233,
+                },
+                {
+                    name: "Apt Entrance Gate",
+                    latitude: 33.409509,
+                    longtitude: -111.917591,
+                },
+                {
+                    name: "Apt Office",
+                    latitude: 33.409413,
+                    longtitude: -111.916808,
+                },
+                {
+                    name: "Arizona State University Tempe",
+                    latitude: 33.420599,
+                    longtitude: -111.933971,
+                },
+            ];
+            // For tracking the nearest location
+            var distMap = new Map();
+            // For init the scene (may be invoked only once)
+            AFRAME.registerComponent("myinit", {
+                init: () => {
+                    pinLocations(locationData);
+                },
+            });
+
+            /**
+             * Load predefined locations into #main-scene
+             */
+            function pinLocations(locationData) {
+                // A list of predefined locations
+                let parentEntity = document.querySelector("#main-scene");
+                if (parentEntity !== null) {
+                    locationData.forEach((v) => {
+                        let name = v.name;
+                        let latitude = v.latitude;
+                        let longtitude = v.longtitude;
+
+                        // Keep track of dist data
+                        distMap.set(name, { dist: -1, distMsg: "" });
+
+                        let pin = document.createElement("a-entity");
+                        pin.setAttribute("gltf-model", "#gltf-pin-mark");
+                        pin.setAttribute("scale", "40 40 40");
+                        pin.setAttribute("meta-name", `${name}`);
+
+                        let pinTxt = document.createElement("a-text");
+                        pinTxt.setAttribute("text", "width: 1; baseline: top; side: double; align: center");
+                        pinTxt.setAttribute("scale", "2 2 2");
+                        pin.appendChild(pinTxt);
+
+                        assignGpsEntityPlace(pin, pinTxt, latitude, longtitude);
+
+                        // Following the example here
+                        // https://medium.com/chialab-open-source/build-your-location-based-augmented-reality-web-app-c2442e716564
+                        pin.addEventListener("loaded", () => {
+                            window.dispatchEvent(new CustomEvent("gps-entity-place-loaded"));
+                        });
+
+                        parentEntity.appendChild(pin);
+                    });
+                } else {
+                    console.warn("pin-locations: the parent entity was not found.");
+                }
+            }
+
+            /**
+             * Get the location by GPS and call the passed callback.
+             */
+            function getCurrentLocation(callback) {
+                navigator.geolocation.getCurrentPosition((position) => {
+                    let latitude = position.coords.latitude;
+                    let longitude = position.coords.longitude;
+                    callback(latitude, longitude);
+                });
+            }
+
+            /**
+             * Assign the location of an entity.
+             */
+            function assignGpsEntityPlace(entity, entityTxt, latitude, longitude) {
+                entity.setAttribute("gps-entity-place", `latitude: ${latitude}; longitude: ${longitude};`);
+                entity.setAttribute("look-at", "[gps-camera]");
+
+                // An event listener fired when the entity location on gps is updated
+                entity.addEventListener("gps-entity-place-update-positon", (detail) => {
+                    let name = entity.getAttribute("meta-name");
+                    let dist = entity.getAttribute("distance");
+                    let distmsg = entity.getAttribute("distancemsg");
+                    // Update the distance message
+                    entityTxt.setAttribute("text", `value: ${name}: ${distmsg}`);
+                    // Trigger a text when the user is close enough
+                    distMap.get(name).distMsg = distmsg;
+                    distMap.set(name, { distMsg: distmsg, dist: dist });
+                    showNearestLocation();
+                });
+            }
+
+            /**
+             * Find the nearest location and show a message about it.
+             */
+            function showNearestLocation() {
+                let cloest = null;
+                let cloestDistMsg = null;
+                let threshold = 10;
+                for (let [key, value] of distMap) {
+                    if (value.dist < threshold) {
+                        cloest = key;
+                        cloestDistMsg = value.distMsg;
+                    }
+                }
+                if (cloest !== null) {
+                    document.querySelector("#hud-msg").innerHTML = `You are around "${cloest}" (${cloestDistMsg})`;
+                } else {
+                    document.querySelector("#hud-msg").innerHTML = "";
+                }
+            }
+        </script>
+    </head>
+
+    <!-- ============================================================ -->
+
+    <body style="margin: 0; overflow: hidden;">
+        <div
+            id="hud-msg"
+            style="
+                position: fixed;
+                top: 5%;
+                left: 0;
+                right: 0;
+                justify-content: center;
+                width: 100%;
+                display: flex;
+                background-color: gold;
+                opacity: 80%;
+                color: white;
+                font-size: 3em;
+            "
+        ></div>
+
+        <div style="position: fixed; bottom: 5%; left: 5%; z-index: 999;">
+            <button onclick="location.reload();">Reload</button>
+        </div>
+
+        <!-- The Main Scene -->
+        <a-scene id="main-scene" vr-mode-ui="enabled: false" arjs myinit>
+            <a-assets>
+                <a-asset-item src="gltf/map_pin/scene.gltf" id="gltf-pin-mark"></a-asset-item>
+            </a-assets>
+
+            <!-- GPS Camera -->
+            <a-camera id="camera" gps-camera rotation-reader position="0 0 0"> </a-camera>
+        </a-scene>
+    </body>
+</html>
